@@ -1,0 +1,49 @@
+name: API 文档生成
+
+on:
+  push:
+    branches: [ main ]  # 当推送到 main 分支时触发
+    paths:
+      - 'internal/api/**'    # 当 API 相关文件改变时触发
+      - 'internal/service/**'
+      - 'docs/**'
+  pull_request:
+    branches: [ main ]  # 当创建针对 main 分支的 PR 时触发
+
+jobs:
+  generate-api-docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # 添加写入权限
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: 设置 Go 环境
+        uses: actions/setup-go@v2
+        with:
+          go-version: '1.21'
+
+      - name: 安装依赖
+        run: |
+          go mod download
+          go install github.com/swaggo/swag/cmd/swag@latest
+
+      - name: 生成 Swagger 文档
+        run: swag init -g cmd/api/main.go
+
+      - name: 构建 API 文档生成工具
+        run: |
+          mkdir -p bin
+          go build -o bin/apidoc cmd/tools/apidoc/main.go
+
+      - name: 生成 API 文档
+        run: |
+          ./bin/apidoc -f docs/swagger.json -o api-docs -ts -md
+
+      - name: 提交文档更新
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add api-docs/
+          git commit -m "自动更新 API 文档" || echo "没有文档更新"
+          git push
